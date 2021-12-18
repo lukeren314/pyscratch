@@ -1,0 +1,12 @@
+# virtual environment files
+Include
+Lib
+Scripts
+pyvenv.cfg
+
+# cache files
+__pycache__
+
+
+# test files
+test
