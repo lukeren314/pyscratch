@@ -1,31 +1,44 @@
 import pygame
 import sys
-from constants import SCREEN_WIDTH, SCREEN_HEIGHT
-from sprite import Sprite
+from .constants import CODE_TO_KEY, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT
+from .sprite import Sprite
 
 class Game:
-    def __init__(self):
-        self.screen_size = (SCREEN_WIDTH, SCREEN_HEIGHT-20)
+    def __init__(self, backdrop_filepaths, screen_size = (DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)):
+        self.screen_size = screen_size
         self.screen = pygame.display.set_mode(self.screen_size)
         self.clock = pygame.time.Clock()
         self.all_sprites = pygame.sprite.LayeredUpdates()
-        self.backdrop = pygame.Surface(self.screen_size)
-        self.backdrop.fill((255, 255, 255))
+        self.hidden_sprites = pygame.sprite.Group()
+        self.backdrops = [pygame.transform.scale(pygame.image.load(backdrop_filepath), self.screen_size) for backdrop_filepath in backdrop_filepaths]
+        self.backdrop_index = 0
+        if self.backdrops:
+            self.backdrop = self.backdrops[self.backdrop_index]
+        else:
+            self.backdrop = pygame.Surface(self.screen_size)
+            self.backdrop.fill((255, 255, 255))
         
+        for SpriteClass in Sprite.__subclasses__():
+            print(f"Added sprite {SpriteClass.__name__} to game")
+            sprite = SpriteClass(self)
+            self.add_sprite(sprite)
 
-    def create_sprite(self, costume_filepaths):
-        sprite = Sprite(costume_filepaths)
-        self.all_sprites.add(sprite)
-        return sprite
+    def set_backdrop(self, backdrop_number):
+        self.backdrop_index = backdrop_number - 1
+        self.update_backdrop()
+
+    def next_backdrop(self):
+        self.set_backdrop((self.backdrop_index % len(self.backdrops)) + 1)
+
+    def update_backdrop(self):
+        self.backdrop = self.backdrops[self.backdrop_index]
     
-    def key_pressed(self, key):
-        assert key in keys, f"Key: {key} does not exist...yet?"
-        return pygame.key.get_pressed()[keys[key]]
-    
-    def set_backdrop(self, image_filename):
-        self.backdrop = pygame.image.load(image_filename)
-        self.backdrop = pygame.transform.scale(self.backdrop, self.screen_size)
-    
+# GAME LOOP -------------------------------------------------------------------
+
+    def run(self):
+        while True:
+            self.loop()
+
     def loop(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT or event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -33,9 +46,14 @@ class Game:
             if event.type == pygame.KEYDOWN:
                 pass
             elif event.type == pygame.KEYUP:
-                pass
+                if event.key in CODE_TO_KEY:
+                    char = CODE_TO_KEY[event.key]
+                    for sprite in self.all_sprites.sprites():
+                        sprite.when_key_pressed(char)
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                pass
+                for sprite in self.all_sprites.sprites():
+                    if sprite.rect.collidepoint(event.pos):
+                        sprite.when_this_sprite_clicked()
             elif event.type == pygame.MOUSEBUTTONUP:
                 pass
             
@@ -49,36 +67,47 @@ class Game:
     def draw(self):
         self.screen.fill((255, 255, 255))
         self.screen.blit(self.backdrop, self.backdrop.get_rect())
-        for sprite in self.all_sprites.sprites():
-            sprite.draw(self.screen)
+        self.all_sprites.draw(self.screen)
         pygame.display.flip()
-        
 
-keys = {
-    'a': pygame.K_a,
-    'b': pygame.K_b,
-    'c': pygame.K_c,
-    'd': pygame.K_d,
-    'e': pygame.K_e,
-    'f': pygame.K_f,
-    'g': pygame.K_g,
-    'h': pygame.K_h,
-    'i': pygame.K_i,
-    'j': pygame.K_j,
-    'k': pygame.K_k,
-    'l': pygame.K_l,
-    'm': pygame.K_m,
-    'n': pygame.K_n,
-    'o': pygame.K_o,
-    'p': pygame.K_p,
-    'q': pygame.K_q,
-    'r': pygame.K_r,
-    's': pygame.K_s,
-    't': pygame.K_t,
-    'u': pygame.K_u,
-    'v': pygame.K_v,
-    'w': pygame.K_w,
-    'x': pygame.K_x,
-    'y': pygame.K_y,
-    'z': pygame.K_z
-}
+# SPRITES ----------------------------------------------------------------------
+
+    def add_sprite(self, sprite):
+        self.all_sprites.add(sprite)
+
+    def show_sprite(self, sprite):
+        if sprite in self.hidden_sprites and sprite not in self.all_sprites:
+            self.hidden_sprites.remove(sprite)
+            self.all_sprites.add(sprite)
+
+    def hide_sprite(self, sprite):
+        if sprite in self.all_sprites and sprite not in self.hidden_sprites:
+            self.all_sprites.remove(sprite)
+            self.hidden_sprites.add(sprite)
+    
+    def is_sprite_hidden(self, sprite):
+        return sprite in self.hidden_sprites
+
+    def get_next_layer(self):
+        if len(self.all_sprites) == 0:
+            return 0
+        return self.all_sprites.get_top_layer() + 1
+
+    def bring_to_front(self, sprite):
+        self.all_sprites.move_to_front(sprite)
+    
+    def bring_to_back(self, sprite):
+        self.all_sprites.move_to_back(sprite)
+    
+    def go_forward_layers(self, sprite, num_layers):
+        if self.all_sprites.get_layer_of_sprite(sprite) == self.all_sprites.get_top_layer() and len(self.all_sprites.get_sprites_from_layer(self.all_sprites.get_top_layer())) == 1:
+            return
+        target_layer = min(self.all_sprites.get_top_layer() + 1, self.all_sprites.get_layer_of_sprite(sprite) + num_layers)
+        self.all_sprites.change_layer(sprite, target_layer)
+    
+    def go_backward_layers(self, sprite, num_layers):
+        if self.all_sprites.get_layer_of_sprite(sprite) == self.all_sprites.get_bottom_layer()and len(self.all_sprites.get_sprites_from_layer(self.all_sprites.get_bottom_layer())) == 1:
+            return
+        target_layer = min(self.all_sprites.get_top_layer() - 1, self.all_sprites.get_layer_of_sprite(sprite) - num_layers)
+        self.all_sprites.change_layer(sprite, target_layer)
+
